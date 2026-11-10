@@ -315,3 +315,45 @@ see [docs/assistant-shares.md](docs/assistant-shares.md).
 A separate `/render-lab` page tests Blender-prepared GLB scenes with Three.js
 interactive rendering and progressive GPU path tracing. It reads local files
 without uploading them. See [developer setup and limitations](docs/render-lab.md).
+
+---
+
+## 🏛️ Sovereign Infrastructure Deployment (Dockge + Nginx Proxy Manager)
+
+This repository is optimized for self-hosting via [Dockge](https://dockge.kuma.pet/) and [Nginx Proxy Manager](https://nginxproxymanager.com/) in `/opt/stacks/openplan3d`.
+
+### 1. Host Preparation
+Ensure the shared Docker proxy network exists:
+```bash
+docker network create proxy_net || true
+```
+
+Clone or pull into the stack directory:
+```bash
+mkdir -p /opt/stacks/openplan3d
+cd /opt/stacks/openplan3d
+```
+
+### 2. Configure Environment
+Initialize your local environment file:
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+Edit `.env` to configure your public origin (e.g., `ORIGIN=https://plan.yourdomain.com`).
+
+### 3. Build and Launch
+Deploy the stack using Docker Compose (or trigger directly from the Dockge UI):
+```bash
+GIT_HASH=$(git rev-parse --short HEAD) docker compose up -d --build
+```
+
+### 4. Nginx Proxy Manager Ingress Configuration
+In the Nginx Proxy Manager admin panel, create a new **Proxy Host**:
+- **Domain Names**: `plan.yourdomain.com`
+- **Scheme**: `http`
+- **Forward Hostname / IP**: `openplan3d`
+- **Forward Port**: `3000`
+- **Websockets Support**: `Enabled`
+- **Block Common Exploits**: `Enabled`
+- **SSL**: Request Let's Encrypt Certificate, enable `Force SSL` and `HTTP/2 Support`.

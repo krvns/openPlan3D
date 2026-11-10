@@ -1,0 +1,27 @@
+services:
+  app:
+    container_name: openplan3d
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_HASH: ${GIT_HASH:-}
+    image: openplan3d:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      PROTOCOL_HEADER: "x-forwarded-proto"
+      HOST_HEADER: "x-forwarded-host"
+      ORIGIN: ${ORIGIN:-https://plan.yourdomain.com}
+    networks:
+      - proxy_net
+
+networks:
+  proxy_net:
+    external: true
+

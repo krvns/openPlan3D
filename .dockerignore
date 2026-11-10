@@ -1,0 +1,36 @@
+# Git and IDE
+.git
+.gitignore
+.vscode
+.claude
+
+# Dependencies
+node_modules
+
+# Build artifacts and caches
+.svelte-kit
+build
+.output
+.vercel
+.netlify
+.wrangler
+
+# Test, benchmark, and coverage reports
+tests
+playwright-report
+test-results
+benchmark-results
+firebase-debug.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Documentation & Markdown
+*.md
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
