@@ -18,7 +18,8 @@ services:
       STORAGE_DIR: "/data/projects"
       PROTOCOL_HEADER: "x-forwarded-proto"
       HOST_HEADER: "x-forwarded-host"
-      ORIGIN: ${ORIGIN:-https://plan.yourdomain.com}
+      ORIGIN: ${ORIGIN:-https://plan.homeiknow.com}
+
     volumes:
       - openplan3d_data:/data
     networks:

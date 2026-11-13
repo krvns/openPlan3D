@@ -340,7 +340,9 @@ Initialize your local environment file:
 cp .env.example .env
 chmod 600 .env
 ```
-Edit `.env` to configure your public origin (e.g., `ORIGIN=https://plan.yourdomain.com`).
+Edit `.env` for your network setup:
+- **Public Domain**: `ORIGIN=https://plan.homeiknow.com`
+- **Private VPN (Tailscale, WireGuard, or local LAN)**: Set `ORIGIN=http://openplan3d.internal` (or `http://<vpn-ip>:3000`). If you access the instance across multiple internal IP addresses or hostnames without TLS, leave `ORIGIN` empty (`ORIGIN=`) to allow all internal VPN origins without CSRF blocks.
 
 ### 3. Build and Launch
 Deploy the stack using Docker Compose (or trigger directly from the Dockge UI):
@@ -348,12 +350,64 @@ Deploy the stack using Docker Compose (or trigger directly from the Dockge UI):
 GIT_HASH=$(git rev-parse --short HEAD) docker compose up -d --build
 ```
 
-### 4. Nginx Proxy Manager Ingress Configuration
-In the Nginx Proxy Manager admin panel, create a new **Proxy Host**:
-- **Domain Names**: `plan.yourdomain.com`
-- **Scheme**: `http`
-- **Forward Hostname / IP**: `openplan3d`
-- **Forward Port**: `3000`
-- **Websockets Support**: `Enabled`
-- **Block Common Exploits**: `Enabled`
-- **SSL**: Request Let's Encrypt Certificate, enable `Force SSL` and `HTTP/2 Support`.
+### 4. Ingress Configuration
+
+#### Ingress WITH Domain (Reverse Proxy / Nginx Proxy Manager)
+
+Use this method when accessing through a public domain, internal private DNS, or Tailscale MagicDNS via Nginx Proxy Manager (or Traefik/Caddy).
+
+1. In `.env`:
+   ```bash
+   # Public HTTPS domain:
+   ORIGIN=https://plan.homeiknow.com
+   # Or internal VPN domain (HTTP or HTTPS):
+   ORIGIN=http://openplan3d.internal
+   ```
+2. In Nginx Proxy Manager, add a **Proxy Host**:
+   - **Domain Names**: `plan.homeiknow.com` (or `openplan3d.internal`)
+   - **Scheme**: `http`
+   - **Forward Hostname / IP**: `openplan3d` (resolves automatically via `proxy_net`)
+   - **Forward Port**: `3000`
+   - **Websockets Support**: `Enabled`
+   - **Block Common Exploits**: `Enabled`
+   - **SSL**:
+     - *Public domain*: Request Let's Encrypt Certificate, enable `Force SSL` and `HTTP/2 Support`.
+     - *Internal VPN domain*: Disable SSL or use your internal CA.
+
+---
+
+#### Ingress WITHOUT Domain (Direct IP / Raw VPN / Localhost)
+
+Use this method when accessing directly by IP address (e.g., `http://10.8.0.5:3000`, `http://192.168.1.100:3000`, or `http://127.0.0.1:3000`) without a domain name or reverse proxy.
+
+1. In `.env`:
+   ```bash
+   # Leave ORIGIN empty so SvelteKit allows requests from any direct IP or port without CSRF rejections:
+   ORIGIN=
+   ```
+
+2. Expose the port in `compose.yaml`:
+   By default, `compose.yaml` has zero host port bindings (designed for NPM ingress over `proxy_net`). To access directly without NPM, add the `ports:` section to the `app` service:
+
+   ```yaml
+   services:
+     app:
+       # ...
+       ports:
+         # To bind to a specific private VPN interface (recommended for security):
+         - "10.8.0.5:3000:3000"
+
+         # Or to bind to localhost only (SSH tunnel / local machine):
+         # - "127.0.0.1:3000:3000"
+
+         # Or to bind to all host interfaces (LAN / VPN):
+         # - "3000:3000"
+   ```
+
+   *(Note: You can omit `networks: - proxy_net` if you are not using Nginx Proxy Manager).*
+
+3. Recreate the container:
+   ```bash
+   docker compose up -d
+   ```
+   Now access the application directly in your browser at `http://<your-ip>:3000`.
