@@ -15,11 +15,17 @@ services:
       NODE_ENV: production
       PORT: "3000"
       HOST: "0.0.0.0"
+      STORAGE_DIR: "/data/projects"
       PROTOCOL_HEADER: "x-forwarded-proto"
       HOST_HEADER: "x-forwarded-host"
       ORIGIN: ${ORIGIN:-https://plan.yourdomain.com}
+    volumes:
+      - openplan3d_data:/data
     networks:
       - proxy_net
+
+volumes:
+  openplan3d_data:
 
 networks:
   proxy_net:

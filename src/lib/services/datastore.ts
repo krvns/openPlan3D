@@ -2,6 +2,7 @@ import { readProject } from '$lib/utils/projectValidation';
 import type { Project } from '$lib/models/types';
 import { withDatabase, transaction, request, records, readRecord, libraryBackup, notifyLibraryChange } from './localDatabase';
 import { requestPersistentStorage } from './storagePersistence';
+import { fetchServerProjects, fetchServerProject, saveProjectToServer, deleteProjectFromServer } from './serverSync';
 export { PROJECTS_STORAGE_KEY, LIBRARY_CHANGE_KEY } from './localDatabase';
 
 export interface DataStore {
@@ -94,6 +95,13 @@ export function createLocalStore(): DataStore {
       });
       // Committed work can now ask the browser to keep the library; the save never waits.
       void requestPersistentStorage();
+      // Sync to server persistently in background
+      void (async () => {
+        try {
+          const thumb = await readRecord('thumbnails', id);
+          await saveProjectToServer(project, thumb);
+        } catch {}
+      })();
     },
 
     async saveCopy(project, suffix = 'Recovered copy') {
@@ -113,6 +121,7 @@ export function createLocalStore(): DataStore {
         opened.set(copy.id, JSON.stringify(copy));
         notifyLibraryChange(copy.id);
         void requestPersistentStorage();
+        void saveProjectToServer(copy, null);
         return copy;
       });
     },
@@ -120,7 +129,33 @@ export function createLocalStore(): DataStore {
     async load(id) {
       // Invalidate queued saves immediately, including while this read is waiting.
       generations.set(id, (generations.get(id) ?? 0) + 1);
-      const raw = await readRecord('projects', id);
+      let raw = await readRecord('projects', id);
+
+      // If not present locally or we are opening, check server
+      if (typeof window !== 'undefined') {
+        const remote = await fetchServerProject(id);
+        if (remote) {
+          const serverProject = readProject(remote.project);
+          const serverTime = new Date(serverProject.updatedAt).getTime();
+          let localTime = 0;
+          if (raw !== null) {
+            try {
+              const localParsed = JSON.parse(raw);
+              localTime = new Date(localParsed.updatedAt).getTime();
+            } catch {}
+          }
+          if (raw === null || serverTime > localTime) {
+            raw = JSON.stringify(serverProject);
+            await withDatabase(db => transaction(db, ['projects', 'thumbnails'], 'readwrite', async tx => {
+              tx.objectStore('projects').put(raw, id);
+              if (remote.thumbnail) {
+                tx.objectStore('thumbnails').put(remote.thumbnail, id);
+              }
+            }));
+          }
+        }
+      }
+
       if (raw === null) { opened.set(id, null); return null; }
       const project = readProject(JSON.parse(raw));
       if (project.id !== id) throw new Error('The saved project ID does not match its library entry. Download a library backup before recovery.');
@@ -130,20 +165,48 @@ export function createLocalStore(): DataStore {
 
     async list() {
       const all = await withDatabase(db => transaction(db, ['projects'], 'readonly', tx => records(tx, 'projects')));
-      const projects = Object.entries(all).map(([id, raw]) => {
+      const projectsMap = new Map<string, { id: string; name: string; updatedAt: string }>();
+
+      for (const [id, raw] of Object.entries(all)) {
         try {
           const p = JSON.parse(raw);
           if (!p || typeof p.name !== 'string' || typeof p.updatedAt !== 'string' || !Number.isFinite(Date.parse(p.updatedAt))) throw new Error();
-          return { id, name: p.name, updatedAt: p.updatedAt };
+          projectsMap.set(id, { id, name: p.name, updatedAt: p.updatedAt });
         } catch {
-          // Keep damaged entries visible and deletable without hiding healthy or
-          // restored projects. Opening still validates; backups retain raw bytes.
-          return { id, name: `Unreadable project — ${id}`, updatedAt: new Date(0).toISOString() };
+          projectsMap.set(id, { id, name: `Unreadable project — ${id}`, updatedAt: new Date(0).toISOString() });
         }
-      });
+      }
+
+      // Sync with server catalog when in browser
+      if (typeof window !== 'undefined') {
+        const serverData = await fetchServerProjects();
+        if (serverData) {
+          // Merge server projects
+          for (const s of serverData.projects) {
+            const existing = projectsMap.get(s.id);
+            if (!existing || new Date(s.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
+              projectsMap.set(s.id, { id: s.id, name: s.name, updatedAt: s.updatedAt });
+            }
+          }
+          // Seed server with any local-only projects
+          for (const [id, localEntry] of projectsMap.entries()) {
+            if (!serverData.projects.some(s => s.id === id)) {
+              const rawLocal = all[id];
+              if (rawLocal) {
+                try {
+                  const parsed = JSON.parse(rawLocal);
+                  const thumb = await readRecord('thumbnails', id);
+                  void saveProjectToServer(parsed, thumb);
+                } catch {}
+              }
+            }
+          }
+        }
+      }
+
       listed.clear();
       for (const [id, raw] of Object.entries(all)) listed.set(id, raw);
-      return projects;
+      return Array.from(projectsMap.values());
     },
 
     async delete(id) {
@@ -160,6 +223,7 @@ export function createLocalStore(): DataStore {
         listed.delete(id);
         notifyLibraryChange(id);
       });
+      void deleteProjectFromServer(id);
     },
 
     async duplicate(id) {
@@ -185,15 +249,39 @@ export function createLocalStore(): DataStore {
           tx.objectStore('thumbnails').put(dataUrl, id);
         }));
       } catch {} // Previews are optional; a failed preview cannot invalidate a saved plan.
+      void (async () => {
+        try {
+          const raw = await readRecord('projects', id);
+          if (raw) {
+            await saveProjectToServer(JSON.parse(raw), dataUrl);
+          }
+        } catch {}
+      })();
     },
 
     async getThumbnail(id) {
-      try { return await readRecord('thumbnails', id); } catch { return null; }
+      try {
+        const local = await readRecord('thumbnails', id);
+        if (local) return local;
+        if (typeof window !== 'undefined') {
+          const remote = await fetchServerProject(id);
+          if (remote?.thumbnail) return remote.thumbnail;
+        }
+        return null;
+      } catch { return null; }
     },
 
     async getThumbnails() {
-      try { return await withDatabase(db => transaction(db, ['thumbnails'], 'readonly', tx => records(tx, 'thumbnails'))); }
-      catch { return {}; }
+      try {
+        const local = await withDatabase(db => transaction(db, ['thumbnails'], 'readonly', tx => records(tx, 'thumbnails')));
+        if (typeof window !== 'undefined') {
+          const serverData = await fetchServerProjects();
+          if (serverData?.thumbnails) {
+            return { ...serverData.thumbnails, ...local };
+          }
+        }
+        return local;
+      } catch { return {}; }
     },
   };
 }
