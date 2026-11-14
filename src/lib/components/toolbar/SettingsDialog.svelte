@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
+  import { base } from '$app/paths';
+  import { goto } from '$app/navigation';
   import { locale, t, type Locale, type TranslationKey } from '$lib/i18n';
   import { modalDialog } from '$lib/utils/modalDialog';
   import { projectSettings } from '$lib/stores/settings';
@@ -36,6 +38,24 @@
   let geminiKeyVisible = $state(false);
   let geminiKeySaved = $state(false);
   let geminiKeyError = $state<TranslationKey | null>(null);
+  let authEnabled = $state(false);
+
+  onMount(() => {
+    void (async () => {
+      try {
+        const res = await fetch(`${base}/api/auth/logout`, { credentials: 'same-origin' });
+        if (res.ok) authEnabled = Boolean((await res.json()).authEnabled);
+      } catch {}
+    })();
+  });
+
+  async function handleLogout() {
+    try {
+      await fetch(`${base}/api/auth/logout`, { method: 'POST', credentials: 'same-origin' });
+    } catch {}
+    close();
+    goto(`${base}/login`);
+  }
 
   // Load API keys from localStorage; the editor always mounts this dialog, so blocked storage must not throw.
   if (typeof window !== 'undefined') {
@@ -348,6 +368,19 @@
           </div>
         {/if}
       </div>
+      {#if authEnabled}
+        <div class="shrink-0 border-t border-gray-200 dark:border-gray-700 px-5 py-3 flex items-center justify-between bg-gray-50/70 dark:bg-gray-800/70 rounded-b-xl">
+          <span class="text-xs text-gray-500 dark:text-gray-400">Protected session</span>
+          <button
+            type="button"
+            onclick={handleLogout}
+            class="px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Log Out
+          </button>
+        </div>
+      {/if}
     </div>
   </dialog>
 {/if}

@@ -342,6 +342,7 @@ chmod 600 .env
 ```
 Edit `.env` for your network setup:
 - **Public Domain**: `ORIGIN=https://plan.homeiknow.com`
+  - **Enable Login Protection (Recommended for Public Internet)**: Set `AUTH_PASSWORD` and generate a signing secret (`openssl rand -hex 32`) for `AUTH_SECRET` (optionally set `AUTH_USERNAME` too). Leave `AUTH_PASSWORD` empty to disable authentication on private/local deployments.
 - **Private VPN (Tailscale, WireGuard, or local LAN)**: Set `ORIGIN=http://openplan3d.internal` (or `http://<vpn-ip>:3000`). If you access the instance across multiple internal IP addresses or hostnames without TLS, leave `ORIGIN` empty (`ORIGIN=`) to allow all internal VPN origins without CSRF blocks.
 
 ### 3. Build and Launch

@@ -19,6 +19,9 @@ services:
       PROTOCOL_HEADER: "x-forwarded-proto"
       HOST_HEADER: "x-forwarded-host"
       ORIGIN: ${ORIGIN:-https://plan.homeiknow.com}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      AUTH_USERNAME: ${AUTH_USERNAME:-}
 
     volumes:
       - openplan3d_data:/data
