@@ -21,8 +21,8 @@ WORKDIR /app
 RUN apk add --no-cache dumb-init \
     && addgroup -g 1001 -S nodejs \
     && adduser -S sveltekit -u 1001 -G nodejs \
-    && mkdir -p /data/projects \
-    && chown -R sveltekit:nodejs /data
+    && mkdir -p /app/data/projects \
+    && chown -R sveltekit:nodejs /app/data
 
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force

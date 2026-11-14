@@ -10,6 +10,7 @@ node_modules
 # Build artifacts and caches
 .svelte-kit
 build
+data
 .output
 .vercel
 .netlify

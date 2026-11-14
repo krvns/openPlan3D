@@ -9,7 +9,8 @@ export interface ServerProjectSummary {
 }
 
 export function getStorageDir(): string {
-  return env.STORAGE_DIR || process.env.STORAGE_DIR || path.resolve(process.cwd(), 'data/projects');
+  const configured = (env.STORAGE_DIR || process.env.STORAGE_DIR || './data/projects').trim();
+  return path.resolve(process.cwd(), configured);
 }
 
 async function ensureDir(dir: string): Promise<void> {
